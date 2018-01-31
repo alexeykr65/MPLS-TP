@@ -19,6 +19,7 @@ flagDebug = int()
 flagL2vpn = int()
 sterraConfig = dict()
 testList = list()
+lastDigit = int()
 flagFullMesh = 0
 flagCentral = 1
 flagClock = 1
@@ -40,7 +41,7 @@ initBFD = [
 
 
 def cmdArgsParser():
-    global fileName, keyPreShare, nameInterface, flagDebug, flagFullMesh, flagL2vpn, flagClock, listTun
+    global fileName, keyPreShare, nameInterface, flagDebug, flagFullMesh, flagL2vpn, flagClock, listTun, lastDigit
     if flagDebug > 0: print "Analyze options ... "
     parser = argparse.ArgumentParser(description=description, epilog=epilog)
     parser.add_argument('-f', '--file', help='File name with source data', dest="fileName", default='mpls_tp.conf')
@@ -58,6 +59,8 @@ def cmdArgsParser():
     if arg.reverse:
         flagClock = 0
     print "flagDebug :" + str(flagDebug)
+    lastDigit = len(listRing)
+    print "LastDigit: " + str(lastDigit)
 
 
 def fileConfigAnalyze():
@@ -74,10 +77,11 @@ def fileConfigAnalyze():
 
 
 def getLinkNumbers(curNum):
+    global lastDigit
     if int(curNum) >= int(listTun[1]):
-        if curNum == '6':
+        if curNum == str(lastDigit):
             linkWorking = curNum + listRing[int(curNum) - 2]
-            linkProtect = curNum + listRing[int(curNum) - 6]
+            linkProtect = curNum + listRing[int(curNum) - lastDigit]
         else:
             linkWorking = curNum + listRing[int(curNum) - 2]
             linkProtect = curNum + listRing[int(curNum)]
@@ -97,7 +101,7 @@ def printResult(strR, fw):
 
 
 def createConfigFileRevers():
-    global flagDebug, flagL2vpn, numBandwidth, flagClock
+    global flagDebug, flagL2vpn, numBandwidth, flagClock, lastDigit
     if flagDebug > 0: print "Create Configuration Files ... "
 
     # Create Configuration file
@@ -105,7 +109,7 @@ def createConfigFileRevers():
     routerNUmLast = listTun[1]
     tunNum = listTun[0] + listTun[1]
     fw = open("config_" + listTun[0] + "_" + listTun[1] + 'r.txt', 'w')
-    # printResult("==============================================================", fw)
+
     printResult("=========== Create Configuration for R" + routerNumFirst + " ===========\nconf t\n", fw)
     linkWorking, linkProtect = getLinkNumbers(routerNumFirst)
     for sStr in initMPLSTP01:
@@ -128,9 +132,8 @@ def createConfigFileRevers():
     printResult("  out-label " + tunNum + linkWorking + " out-link " + linkWorking, fw)
     printResult("  in-label " + tunNum + ''.join(reversed(linkWorking)), fw)
     printResult("  lsp-number 1" + tunNum, fw)
-
     printResult("end\n", fw)
-    # printResult("==============================================================", fw)
+
     printResult("=========== Create Configuration for R" + routerNUmLast + " ===========\nconf t\n", fw)
     linkWorking, linkProtect = getLinkNumbers(routerNUmLast)
     for sStr in initMPLSTP01:
@@ -152,7 +155,6 @@ def createConfigFileRevers():
     printResult("  out-label " + tunNum + linkWorking + " out-link " + linkWorking, fw)
     printResult("  in-label " + tunNum + ''.join(reversed(linkWorking)), fw)
     printResult("  lsp-number 1" + tunNum, fw)
-
     printResult("end\n", fw)
     # exit()
     for intR in listRing:
@@ -161,7 +163,7 @@ def createConfigFileRevers():
             continue
         if int(intR) > int(listTun[0]) and int(intR) < int(listTun[1]):
             flagLink = "protect"
-        # printResult("==============================================================", fw)
+
         printResult("=========== Create Configuration for R" + intR + " ===========\nconf t", fw)
 
         linkWorking, linkProtect = getLinkNumbers(intR)
@@ -171,7 +173,7 @@ def createConfigFileRevers():
         printResult("l2 router-id 1.1.1." + str(intR), fw)
         for sStr in initBFD:
             printResult(sStr, fw)
-        if intR == '6':
+        if intR == lastDigit:
             printResult("mpls tp lsp source 1.1.1." + routerNumFirst + " tunnel-tp " + tunNum + " lsp " + flagLink + " destination 1.1.1." + routerNUmLast + " tunnel-tp " + tunNum, fw)
             printResult(" forward-lsp", fw)
             printResult("  bandwidth " + str(numBandwidth), fw)
@@ -196,7 +198,7 @@ def createConfigFileRevers():
 
 
 def createConfigFileClockwise():
-    global flagDebug, flagL2vpn, numBandwidth, flagClock
+    global flagDebug, flagL2vpn, numBandwidth, flagClock, LastDigit
     if flagDebug > 0: print "Create Configuration Files ... "
 
     # Create Configuration file
@@ -204,7 +206,7 @@ def createConfigFileClockwise():
     routerNUmLast = listTun[1]
     tunNum = listTun[0] + listTun[1]
     fw = open("config_" + listTun[0] + "_" + listTun[1] + '.txt', 'w')
-    # printResult("==============================================================", fw)
+
     printResult("=========== Create Configuration for R" + routerNumFirst + " ===========\nconf t\n", fw)
     linkWorking, linkProtect = getLinkNumbers(routerNumFirst)
     for sStr in initMPLSTP01:
@@ -228,7 +230,7 @@ def createConfigFileClockwise():
     printResult("  in-label " + tunNum + ''.join(reversed(linkProtect)), fw)
     printResult("  lsp-number 1" + tunNum, fw)
     printResult("end\n", fw)
-    #  printResult("==============================================================", fw)
+
     printResult("=========== Create Configuration for R" + routerNUmLast + " ===========\nconf t\n", fw)
     linkWorking, linkProtect = getLinkNumbers(routerNUmLast)
     for sStr in initMPLSTP01:
@@ -257,9 +259,8 @@ def createConfigFileClockwise():
             continue
         if int(intR) < int(listTun[0]) or int(intR) > int(listTun[1]):
             flagLink = "protect"
-        # printResult("==============================================================", fw)
-        printResult("=========== Create Configuration for R" + intR + " ===========\nconf t", fw)
 
+        printResult("=========== Create Configuration for R" + intR + " ===========\nconf t", fw)
         linkWorking, linkProtect = getLinkNumbers(intR)
         for sStr in initMPLSTP01:
             printResult(sStr, fw)
@@ -267,7 +268,7 @@ def createConfigFileClockwise():
         printResult("l2 router-id 1.1.1." + str(intR), fw)
         for sStr in initBFD:
             printResult(sStr, fw)
-        if intR == '6':
+        if intR == lastDigit:
             printResult("mpls tp lsp source 1.1.1." + routerNumFirst + " tunnel-tp " + tunNum + " lsp " + flagLink + " destination 1.1.1." + routerNUmLast + " tunnel-tp " + tunNum, fw)
             printResult(" forward-lsp", fw)
             printResult("  bandwidth " + str(numBandwidth), fw)
@@ -301,3 +302,4 @@ if __name__ == '__main__':
         createConfigFileRevers()
     if flagDebug > 0: print "Script complete successful!!! "
     sys.exit()
+
