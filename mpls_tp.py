@@ -48,7 +48,7 @@ def cmdArgsParser():
     if flagDebug > 0: print "Analyze options ... "
     parser = argparse.ArgumentParser(description=description, epilog=epilog)
     parser.add_argument('-f', '--file', help='File name with source data', dest="fileName", default='mpls_tp.conf')
-    parser.add_argument('-d', '--debug', help='Debug information view(default =1, 2- more verbose', dest="flagDebug", default=1)
+    parser.add_argument('-d', '--debug', help='Debug information view(default =1, 2- more verbose)', dest="flagDebug", default=1)
     parser.add_argument('-n', '--num', help='Numbers of pair Routers (ex: 1,3)', dest="listTun", default="")
     parser.add_argument('-l', '--listring', help='Numbers of Routers', dest="listRing", default="6")
     parser.add_argument('-r', '--reverse', help='Against Clockwise LSP path', action="store_true")
@@ -64,7 +64,7 @@ def cmdArgsParser():
             listRing.append(str(i))
 
     print "Routers Ring list: " + str(listRing)
-    print "Tunnel numbers list: " + str(listTun)
+    print "Tunnel default numbers list: " + str(listTun)
     if arg.reverse:
         flagClock = 0
     if arg.alltun:
@@ -78,12 +78,10 @@ def cmdArgsParser():
 def fileConfigAnalyze():
     if flagDebug > 0: print "Analyze source file : " + fileName + " ..."
     f = open(fileName, 'r')
-
     # dictSterra = dict()
     for sLine in f:
         if re.match("#!(.*)$", sLine, re.IGNORECASE):
             print "General ...."
-
     f.close()
     if flagDebug > 1: print " Sterra Configuration : " + str(sterraConfig)
 
@@ -114,13 +112,6 @@ def outResult(strR, numRouter):
         confRoutersAll[numRouter] = strR + "\n"
 
 
-def printResult(strR, fw):
-    if flagDebug > 1:
-        print strR
-    fw.write(strR)
-    fw.write("\n")
-
-
 def createMPLSTPconfig():
     for i in range(1, lastDigit + 1):
         outResult("!=========== Create Configuration for R" + str(i) + " ===========\nconf t\n", str(i))
@@ -130,7 +121,6 @@ def createMPLSTPconfig():
         outResult("l2 router-id 1.1.1." + str(i), str(i))
         for sStr in initBFD:
             outResult(sStr, str(i))
-
         outResult("\n", str(i))
 
 
@@ -196,7 +186,6 @@ def createTunnelTransit(routerNumFirst, routerNumLast):
 
 def createConfigRouters():
     global listTun
-    # fw = open("config_" + listTun[0] + "_" + listTun[1] + 'r.txt', 'w')
     createTunnelEnds(listTun[0], listTun[1])
     createTunnelEnds(listTun[1], listTun[0])
     createTunnelTransit(listTun[0], listTun[1])
