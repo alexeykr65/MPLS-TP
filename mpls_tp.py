@@ -10,8 +10,8 @@ import argparse
 import re
 # import random
 
-description = "mpls: Generate MPLS-TP tunnel configuration"
-epilog = "ciscoblog.ru"
+description = "MPLS-TP: Generate MPLS-TP tunnels configuration, v2.0"
+epilog = "http://ciscoblog.ru"
 
 listRing = list()
 listTun = ['1', '3']
@@ -22,11 +22,14 @@ testList = list()
 lastDigit = int()
 flagFullMesh = 0
 flagCentral = 1
+flagInterfaces = 0
 flagClock = 1
 flagAllTun = 0
 lastDigit = 0
 numBandwidth = 20000
 confRoutersAll = dict()
+listInterfaceRouter = dict()
+confInterfaceRouter = dict()
 
 keyPreShare = ""
 fileName = ""
@@ -44,7 +47,7 @@ initBFD = [
 
 
 def cmdArgsParser():
-    global fileName, keyPreShare, nameInterface, flagDebug, flagFullMesh, flagL2vpn, flagClock, listTun, lastDigit, listRing, flagAllTun
+    global fileName, keyPreShare, nameInterface, flagDebug, flagFullMesh, flagL2vpn, flagClock, listTun, lastDigit, listRing, flagAllTun, flagInterfaces
     if flagDebug > 0: print "Analyze options ... "
     parser = argparse.ArgumentParser(description=description, epilog=epilog)
     parser.add_argument('-f', '--file', help='File name with source data', dest="fileName", default='mpls_tp.conf')
@@ -52,6 +55,7 @@ def cmdArgsParser():
     parser.add_argument('-n', '--num', help='Numbers of pair Routers (ex: 1,3)', dest="listTun", default="")
     parser.add_argument('-l', '--listring', help='Numbers of Routers', dest="listRing", default="6")
     parser.add_argument('-r', '--reverse', help='Against Clockwise LSP path', action="store_true")
+    parser.add_argument('-i', '--interface', help='Create Configuration Interfaces', action="store_true")
     parser.add_argument('-a', '--alltun', help='Create All Tunnel', action="store_true")
 
     arg = parser.parse_args()
@@ -69,21 +73,25 @@ def cmdArgsParser():
         flagClock = 0
     if arg.alltun:
         flagAllTun = 1
-
+    if arg.interface:
+        flagInterfaces = 1
     print "flagDebug :" + str(flagDebug)
     lastDigit = len(listRing)
     print "LastDigit: " + str(lastDigit)
 
 
 def fileConfigAnalyze():
+    global listInterfaceRouter
     if flagDebug > 0: print "Analyze source file : " + fileName + " ..."
     f = open(fileName, 'r')
-    # dictSterra = dict()
     for sLine in f:
-        if re.match("#!(.*)$", sLine, re.IGNORECASE):
-            print "General ...."
+        if re.match("[^\s](.*)$", sLine, re.IGNORECASE):
+            if flagDebug > 1: print "========================================"
+            intrLeft, sRouter, intrRight = sLine.split(':')
+            listInterfaceRouter[sRouter] = [intrLeft.strip(), intrRight.strip()]
+            if flagDebug > 1: print "General ...." + intrLeft + " " + intrRight
     f.close()
-    if flagDebug > 1: print " Sterra Configuration : " + str(sterraConfig)
+    # if flagDebug > 1: print " Sterra Configuration : " + str(sterraConfig)
 
 
 def getLinkNumbers(curNum):
@@ -104,12 +112,45 @@ def getLinkNumbers(curNum):
 
 
 def outResult(strR, numRouter):
+    global confRoutersAll
     if flagDebug > 1:
         print strR
     if numRouter in confRoutersAll:
         confRoutersAll[numRouter] = confRoutersAll[numRouter] + strR + "\n"
     else:
         confRoutersAll[numRouter] = strR + "\n"
+
+
+def createConfigInterfaces():
+    global listInterfaceRouter
+    for i in listInterfaceRouter:
+        # default interface gig1
+        # interface GigabitEthernet1
+        #  medium p2p
+        #  mpls tp link 65
+        #  ip rsvp bandwidth percent 100
+        #
+        # default interface gig2
+        # interface GigabitEthernet2
+        #  medium p2p
+        #  mpls tp link 61
+        #  ip rsvp bandwidth percent 100
+
+        confInterfaceRouter[i] = "conf t\ninterface " + listInterfaceRouter[i][0] + "\n"
+        confInterfaceRouter[i] += " medium p2p\n"
+        if (int(i) - 1) > 0:
+            confInterfaceRouter[i] += " mpls tp link " + str(i) + str(int(i) - 1) + "\n"
+        else:
+            confInterfaceRouter[i] += " mpls tp link " + str(i) + str(lastDigit) + "\n"
+        confInterfaceRouter[i] += " ip rsvp bandwidth percent 100 \n\n"
+
+        confInterfaceRouter[i] += "interface " + listInterfaceRouter[i][1] + "\n"
+        confInterfaceRouter[i] += " medium p2p\n"
+        confInterfaceRouter[i] += " mpls tp link " + str(i) + str(int(i) + 1) + "\n"
+        confInterfaceRouter[i] += " ip rsvp bandwidth percent 100 \n"
+
+        confInterfaceRouter[i] += "end\n"
+        # outResult("!=========== Create Config Interfaces for " + str(i) + " ===========\nconf t\n", str(i))
 
 
 def createMPLSTPconfig():
@@ -147,7 +188,7 @@ def createTunnelEnds(routerNumFirst, routerNumLast):
     outResult("  out-label " + tunNum + linkProtect + " out-link " + linkProtect, routerNumFirst)
     outResult("  in-label " + tunNum + ''.join(reversed(linkProtect)), routerNumFirst)
     outResult("  lsp-number 1" + tunNum, routerNumFirst)
-    outResult("end\n", routerNumFirst)
+    # outResult("end\n", routerNumFirst)
 
 
 def createTunnelTransit(routerNumFirst, routerNumLast):
@@ -181,7 +222,7 @@ def createTunnelTransit(routerNumFirst, routerNumLast):
             outResult(" reverse-lsp", intR)
             outResult("  bandwidth " + str(numBandwidth), intR)
             outResult("  in-label " + tunNum + ''.join(reversed(linkWorking)) + " out-label " + tunNum + linkProtect + " out-link " + linkProtect, intR)
-        outResult("end\n", intR)
+        # outResult("end\n", intR)
 
 
 def createConfigRouters():
@@ -193,7 +234,15 @@ def createConfigRouters():
 
 if __name__ == '__main__':
     cmdArgsParser()
-    # fileConfigAnalyze()
+    fileConfigAnalyze()
+    if flagInterfaces:
+        createConfigInterfaces()
+        for sR in listInterfaceRouter:
+            fw = open("config_interfaces_" + "R" + str(sR) + '.txt', 'w')
+            fw.write(confInterfaceRouter[sR])
+            fw.write("\n\n")
+            fw.close()
+
     createMPLSTPconfig()
     if flagClock:
         if flagDebug > 0: print "Flag: Clockwise ... "
@@ -216,9 +265,11 @@ if __name__ == '__main__':
     # createConfigRouters('1', '3')
     if flagDebug > 0: print "Script complete successful!!! "
     for i in confRoutersAll:
-        fw = open("config_" + "R" + str(i) + '.txt', 'w')
+        fw = open("config_tunnels_" + "R" + str(i) + '.txt', 'w')
         fw.write(confRoutersAll[i])
         fw.write("\n\n")
         fw.close()
 
+
     sys.exit()
+
