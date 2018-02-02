@@ -124,29 +124,21 @@ def outResult(strR, numRouter):
 def createConfigInterfaces():
     global listInterfaceRouter
     for i in listInterfaceRouter:
-        # default interface gig1
-        # interface GigabitEthernet1
-        #  medium p2p
-        #  mpls tp link 65
-        #  ip rsvp bandwidth percent 100
-        #
-        # default interface gig2
-        # interface GigabitEthernet2
-        #  medium p2p
-        #  mpls tp link 61
-        #  ip rsvp bandwidth percent 100
-
-        confInterfaceRouter[i] = "conf t\ninterface " + listInterfaceRouter[i][0] + "\n"
+        confInterfaceRouter[i] = "default interface " + listInterfaceRouter[i][0] + "\n"
+        confInterfaceRouter[i] += "conf t\ninterface " + listInterfaceRouter[i][0] + "\n"
         confInterfaceRouter[i] += " medium p2p\n"
         if (int(i) - 1) > 0:
             confInterfaceRouter[i] += " mpls tp link " + str(i) + str(int(i) - 1) + "\n"
         else:
             confInterfaceRouter[i] += " mpls tp link " + str(i) + str(lastDigit) + "\n"
         confInterfaceRouter[i] += " ip rsvp bandwidth percent 100 \n\n"
-
+        confInterfaceRouter[i] += "default interface " + listInterfaceRouter[i][1] + "\n"
         confInterfaceRouter[i] += "interface " + listInterfaceRouter[i][1] + "\n"
         confInterfaceRouter[i] += " medium p2p\n"
-        confInterfaceRouter[i] += " mpls tp link " + str(i) + str(int(i) + 1) + "\n"
+        if (int(i) + 1) <= lastDigit:
+            confInterfaceRouter[i] += " mpls tp link " + str(i) + str(int(i) + 1) + "\n"
+        else:
+            confInterfaceRouter[i] += " mpls tp link " + str(i) + '1' + "\n"
         confInterfaceRouter[i] += " ip rsvp bandwidth percent 100 \n"
 
         confInterfaceRouter[i] += "end\n"
