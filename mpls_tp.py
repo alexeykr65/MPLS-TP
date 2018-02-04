@@ -16,7 +16,6 @@ epilog = "http://ciscoblog.ru"
 listRing = list()
 listTun = ['1', '3']
 flagDebug = int()
-flagL2vpn = int()
 sterraConfig = dict()
 testList = list()
 lastDigit = int()
@@ -26,7 +25,7 @@ flagInterfaces = 0
 flagClock = 1
 flagAllTun = 0
 lastDigit = 0
-numBandwidth = 20000
+numBandwidth = 10000
 confRoutersAll = dict()
 listInterfaceRouter = dict()
 confInterfaceRouter = dict()
@@ -34,20 +33,19 @@ confInterfaceRouter = dict()
 keyPreShare = ""
 fileName = ""
 
-initMPLSTP01 = [
-    'mpls label range 32760 32767 static 16 32700',
-    'mpls tp'
+initMPLSTP_LABEL = """
+mpls label range 32760 32767 static 16 32700
+mpls tp
+"""
 
-]
-
-initBFD = [
-    'bfd-template single-hop DEFAULT',
-    ' interval min-tx 5000 min-rx 5000 multiplier 3'
-]
+initBFD = """
+bfd-template single-hop DEFAULT
+ interval min-tx 5000 min-rx 5000 multiplier 3
+"""
 
 
 def cmdArgsParser():
-    global fileName, keyPreShare, nameInterface, flagDebug, flagFullMesh, flagL2vpn, flagClock, listTun, lastDigit, listRing, flagAllTun, flagInterfaces
+    global fileName, keyPreShare, nameInterface, flagDebug, flagFullMesh, flagClock, listTun, lastDigit, listRing, flagAllTun, flagInterfaces
     if flagDebug > 0: print "Analyze options ... "
     parser = argparse.ArgumentParser(description=description, epilog=epilog)
     parser.add_argument('-f', '--file', help='File name with source data', dest="fileName", default='mpls_tp.conf')
@@ -55,8 +53,8 @@ def cmdArgsParser():
     parser.add_argument('-n', '--num', help='Numbers of pair Routers (ex: 1,3)', dest="listTun", default="")
     parser.add_argument('-l', '--listring', help='Numbers of Routers', dest="listRing", default="6")
     parser.add_argument('-r', '--reverse', help='Against Clockwise LSP path', action="store_true")
-    parser.add_argument('-i', '--interface', help='Create Configuration Interfaces', action="store_true")
-    parser.add_argument('-a', '--alltun', help='Create All Tunnel', action="store_true")
+    parser.add_argument('-i', '--interface', help='Create Config Interfaces', action="store_true")
+    parser.add_argument('-a', '--alltun', help='Create All possible Tunnel', action="store_true")
 
     arg = parser.parse_args()
     fileName = arg.fileName
@@ -125,7 +123,7 @@ def createConfigInterfaces():
     global listInterfaceRouter
     for i in listInterfaceRouter:
         confInterfaceRouter[i] = "default interface " + listInterfaceRouter[i][0] + "\n"
-        confInterfaceRouter[i] += "conf t\ninterface " + listInterfaceRouter[i][0] + "\n"
+        confInterfaceRouter[i] += "interface " + listInterfaceRouter[i][0] + "\n"
         confInterfaceRouter[i] += " medium p2p\n"
         if (int(i) - 1) > 0:
             confInterfaceRouter[i] += " mpls tp link " + str(i) + str(int(i) - 1) + "\n"
@@ -146,14 +144,13 @@ def createConfigInterfaces():
 
 
 def createMPLSTPconfig():
+    global initBFD, initMPLSTP_LABEL
     for i in range(1, lastDigit + 1):
         outResult("!=========== Create Configuration for R" + str(i) + " ===========\nconf t\n", str(i))
-        for sStr in initMPLSTP01:
-            outResult(sStr, str(i))
+        outResult(initMPLSTP_LABEL, str(i))
         outResult("router-id 1.1.1." + str(i), str(i))
         outResult("l2 router-id 1.1.1." + str(i), str(i))
-        for sStr in initBFD:
-            outResult(sStr, str(i))
+        outResult(initBFD, str(i))
         outResult("\n", str(i))
 
 
@@ -254,14 +251,12 @@ if __name__ == '__main__':
     else:
         createConfigRouters()
 
-    # createConfigRouters('1', '3')
-    if flagDebug > 0: print "Script complete successful!!! "
     for i in confRoutersAll:
         fw = open("config_tunnels_" + "R" + str(i) + '.txt', 'w')
         fw.write(confRoutersAll[i])
         fw.write("\n\n")
         fw.close()
 
+    if flagDebug > 0: print "Script complete successful!!! "
 
     sys.exit()
-
