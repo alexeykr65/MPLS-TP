@@ -6,6 +6,7 @@
 #
 import sys
 import argparse
+import os
 # import string
 import re
 # import random
@@ -25,10 +26,15 @@ flagInterfaces = 0
 flagClock = 1
 flagAllTun = 0
 lastDigit = 0
+flagPseudo = 0
 numBandwidth = 10000
 confRoutersAll = dict()
 listInterfaceRouter = dict()
 confInterfaceRouter = dict()
+confPseudo = dict()
+listSectionConfig = ['interface', 'pseudowire']
+listParamConfig = ['service_interface', 'description', '']
+listPseudowires = dict()
 
 keyPreShare = ""
 fileName = ""
@@ -45,7 +51,7 @@ bfd-template single-hop DEFAULT
 
 
 def cmdArgsParser():
-    global fileName, keyPreShare, nameInterface, flagDebug, flagFullMesh, flagClock, listTun, lastDigit, listRing, flagAllTun, flagInterfaces
+    global fileName, keyPreShare, nameInterface, flagDebug, flagFullMesh, flagClock, listTun, lastDigit, listRing, flagAllTun, flagInterfaces, flagPseudo
     if flagDebug > 0: print "Analyze options ... "
     parser = argparse.ArgumentParser(description=description, epilog=epilog)
     parser.add_argument('-f', '--file', help='File name with source data', dest="fileName", default='mpls_tp.conf')
@@ -54,6 +60,7 @@ def cmdArgsParser():
     parser.add_argument('-l', '--listring', help='Numbers of Routers', dest="listRing", default="6")
     parser.add_argument('-r', '--reverse', help='Against Clockwise LSP path', action="store_true")
     parser.add_argument('-i', '--interface', help='Create Config Interfaces', action="store_true")
+    parser.add_argument('-p', '--pseudowires', help='Create Pseudowires Interfaces', action="store_true")
     parser.add_argument('-a', '--alltun', help='Create All possible Tunnel', action="store_true")
 
     arg = parser.parse_args()
@@ -73,6 +80,8 @@ def cmdArgsParser():
         flagAllTun = 1
     if arg.interface:
         flagInterfaces = 1
+    if arg.pseudowires:
+        flagPseudo = 1
     print "flagDebug :" + str(flagDebug)
     lastDigit = len(listRing)
     print "LastDigit: " + str(lastDigit)
@@ -81,15 +90,39 @@ def cmdArgsParser():
 def fileConfigAnalyze():
     global listInterfaceRouter
     if flagDebug > 0: print "Analyze source file : " + fileName + " ..."
+    if not os.path.isfile(fileName):
+        if flagDebug > 0: print "Configuration File : " + fileName + " does not exist"
+        return
     f = open(fileName, 'r')
     for sLine in f:
-        if re.match("[^\s](.*)$", sLine, re.IGNORECASE):
+        if not re.match("[^\s](.*)$", sLine, re.IGNORECASE):
+            continue
+        if re.match("#!(.*)$", sLine, re.IGNORECASE):
+            nameSection = re.match("#!(.*)$", sLine, re.IGNORECASE).group(1).strip()
+            if re.search('pseudowire', nameSection, re.IGNORECASE):
+                numPseudo = re.match("[^\d]*([\d]+)", nameSection, re.IGNORECASE).group(1).strip()
+                if flagDebug > 1: print "numPseudo : " + numPseudo
+                listPseudowires[numPseudo] = dict()
+            continue
+
+        if flagDebug > 1: print "Name section : " + nameSection
+        if nameSection.lower() == 'interfaces' and not re.match("#!(.*)$", sLine, re.IGNORECASE):
             if flagDebug > 1: print "========================================"
             intrLeft, sRouter, intrRight = sLine.split(':')
             listInterfaceRouter[sRouter] = [intrLeft.strip(), intrRight.strip()]
             if flagDebug > 1: print "General ...." + intrLeft + " " + intrRight
+        if re.search('description', sLine, re.IGNORECASE) and re.search('pseudowire', nameSection, re.IGNORECASE):
+            nameParam, descrPseudo = sLine.split('=')
+            listPseudowires[numPseudo][nameParam.strip()] = descrPseudo.strip()
+        if re.search('srv_int_first', sLine, re.IGNORECASE) and re.search('pseudowire', nameSection, re.IGNORECASE):
+            nameParam, descrPseudo = sLine.split('=')
+            listPseudowires[numPseudo][nameParam.strip()] = descrPseudo.strip()
+        if re.search('srv_int_sec', sLine, re.IGNORECASE) and re.search('pseudowire', nameSection, re.IGNORECASE):
+            nameParam, descrPseudo = sLine.split('=')
+            listPseudowires[numPseudo][nameParam.strip()] = descrPseudo.strip()
+
+    if flagDebug > 1: print listPseudowires
     f.close()
-    # if flagDebug > 1: print " Sterra Configuration : " + str(sterraConfig)
 
 
 def getLinkNumbers(curNum):
@@ -117,6 +150,58 @@ def outResult(strR, numRouter):
         confRoutersAll[numRouter] = confRoutersAll[numRouter] + strR + "\n"
     else:
         confRoutersAll[numRouter] = strR + "\n"
+
+
+def templatePseudo(i, routerFirst, routerSecond, nameInterface):
+    global confPseudo
+    confPseudo[routerFirst] += "interface pseudowire" + i + "\n"
+    confPseudo[routerFirst] += " description " + listPseudowires[i]['description'].strip() + "\n"
+    confPseudo[routerFirst] += " encapsulation mpls" + "\n"
+    confPseudo[routerFirst] += " signaling protocol none" + "\n"
+    confPseudo[routerFirst] += " neighbord 1.1.1." + routerSecond + " " + i + "\n"
+    confPseudo[routerFirst] += " control-word include" + "\n"
+    confPseudo[routerFirst] += " label 2" + i + " 2" + i + "\n"
+    confPseudo[routerFirst] += " preferred-path interface Tunnel-tp" + i[0:2] + "\n\n"
+    if re.match('gig', listPseudowires[i][nameInterface], re.IGNORECASE):
+        confPseudo[routerFirst] += "interface " + listPseudowires[i][nameInterface].strip() + "\n"
+        confPseudo[routerFirst] += " description " + listPseudowires[i]['description'].strip() + "\n"
+        confPseudo[routerFirst] += " service instance 100 ethernet \n"
+        confPseudo[routerFirst] += " encapsulation default \n\n"
+
+        confPseudo[routerFirst] += "l2vpn xconnect context " + '_'.join(listPseudowires[i]['description'][0:30].split()) + "\n"
+        confPseudo[routerFirst] += " member pseudowire" + i + "\n"
+        confPseudo[routerFirst] += " member " + listPseudowires[i][nameInterface].strip() + " service-instance 100 \n\n"
+    if re.match('cem', listPseudowires[i][nameInterface], re.IGNORECASE):
+        numPort = re.match("^[^\d]*\d\/\d\/(\d)", listPseudowires[i][nameInterface].strip(), re.IGNORECASE).group(1)
+        cemGroup = int(numPort) + 1
+        numPortE1 = re.match("^[^\d]*(\d\/\d\/\d)", listPseudowires[i][nameInterface].strip(), re.IGNORECASE).group(1)
+        confPseudo[routerFirst] += "controller E1 " + numPortE1 + "\n"
+        confPseudo[routerFirst] += " framing unframed \n"
+        confPseudo[routerFirst] += " clock source internal \n"
+        confPseudo[routerFirst] += " cem-group " + str(cemGroup) + " unframed  \n\n"
+
+        confPseudo[routerFirst] += "interface " + listPseudowires[i][nameInterface].strip() + "\n"
+        confPseudo[routerFirst] += " description " + listPseudowires[i]['description'].strip() + "\n"
+        confPseudo[routerFirst] += " cem " + str(cemGroup) + "\n\n"
+
+        confPseudo[routerFirst] += "l2vpn xconnect context " + '_'.join(listPseudowires[i]['description'][0:30].split()) + "\n"
+        confPseudo[routerFirst] += " member pseudowire" + i + "\n"
+        confPseudo[routerFirst] += " member " + listPseudowires[i][nameInterface].strip() + " " + str(cemGroup) + " \n\n"
+
+
+def createConfigPseudo():
+    global listPseudowires
+    for i in listPseudowires:
+        if flagDebug > 1: print "Pseudo : " + i
+        routerFirst = re.match("^(\d)\d\d\d$", i).group(1)[0]
+        routerSecond = re.match("^\d(\d)\d\d$", i).group(1)[0]
+        if flagDebug > 1: print "First: " + routerFirst + "   " + routerSecond
+        if routerFirst not in confPseudo:
+            confPseudo[routerFirst] = ""
+        if routerSecond not in confPseudo:
+            confPseudo[routerSecond] = ""
+        templatePseudo(i, routerFirst, routerSecond, 'srv_int_first')
+        templatePseudo(i, routerSecond, routerFirst, 'srv_int_sec')
 
 
 def createConfigInterfaces():
@@ -232,7 +317,15 @@ if __name__ == '__main__':
             fw.write("\n\n")
             fw.close()
 
+    if flagPseudo:
+        createConfigPseudo()
+        for sR in confPseudo:
+            fw = open("config_pseudo_" + "R" + str(sR) + '.txt', 'w')
+            fw.write(confPseudo[sR])
+            fw.write("\n\n")
+            fw.close()
     createMPLSTPconfig()
+    ()
     if flagClock:
         if flagDebug > 0: print "Flag: Clockwise ... "
     else:
