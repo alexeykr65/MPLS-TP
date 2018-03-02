@@ -46,7 +46,7 @@ mpls tp
 
 initBFD = """
 bfd-template single-hop DEFAULT
- interval min-tx 5000 min-rx 5000 multiplier 3
+ interval min-tx 10 min-rx 10 multiplier 3
 """
 
 
@@ -58,9 +58,9 @@ def cmdArgsParser():
     parser.add_argument('-d', '--debug', help='Debug information view(default =1, 2- more verbose)', dest="flagDebug", default=1)
     parser.add_argument('-n', '--num', help='Numbers of pair Routers (ex: 1,3)', dest="listTun", default="")
     parser.add_argument('-l', '--listring', help='Numbers of Routers', dest="listRing", default="6")
-    parser.add_argument('-r', '--reverse', help='Against Clockwise LSP path', action="store_true")
+    parser.add_argument('-r', '--reverse', help='Against Clockwise working LSP path', action="store_true")
     parser.add_argument('-i', '--interface', help='Create Config Interfaces', action="store_true")
-    parser.add_argument('-p', '--pseudowires', help='Create Pseudowires Interfaces', action="store_true")
+    parser.add_argument('-p', '--pseudowires', help='Create Pseudowires Interfaces from config file', action="store_true")
     parser.add_argument('-a', '--alltun', help='Create All possible Tunnel', action="store_true")
 
     arg = parser.parse_args()
@@ -111,7 +111,10 @@ def fileConfigAnalyze():
             intrLeft, sRouter, intrRight = sLine.split(':')
             listInterfaceRouter[sRouter] = [intrLeft.strip(), intrRight.strip()]
             if flagDebug > 1: print "General ...." + intrLeft + " " + intrRight
-        if re.search('description', sLine, re.IGNORECASE) and re.search('pseudowire', nameSection, re.IGNORECASE):
+        if re.search('description_first', sLine, re.IGNORECASE) and re.search('pseudowire', nameSection, re.IGNORECASE):
+            nameParam, descrPseudo = sLine.split('=')
+            listPseudowires[numPseudo][nameParam.strip()] = descrPseudo.strip()
+        if re.search('description_sec', sLine, re.IGNORECASE) and re.search('pseudowire', nameSection, re.IGNORECASE):
             nameParam, descrPseudo = sLine.split('=')
             listPseudowires[numPseudo][nameParam.strip()] = descrPseudo.strip()
         if re.search('srv_int_first', sLine, re.IGNORECASE) and re.search('pseudowire', nameSection, re.IGNORECASE):
@@ -152,25 +155,28 @@ def outResult(strR, numRouter):
         confRoutersAll[numRouter] = strR + "\n"
 
 
-def templatePseudo(i, routerFirst, routerSecond, nameInterface):
+def templatePseudo(i, routerFirst, routerSecond, nameInterface, descriptionPseudo):
     global confPseudo
     confPseudo[routerFirst] += "interface pseudowire" + i + "\n"
-    confPseudo[routerFirst] += " description " + listPseudowires[i]['description'].strip() + "\n"
+    confPseudo[routerFirst] += " description " + listPseudowires[i][descriptionPseudo].strip() + "\n"
     confPseudo[routerFirst] += " encapsulation mpls" + "\n"
     confPseudo[routerFirst] += " signaling protocol none" + "\n"
-    confPseudo[routerFirst] += " neighbord 1.1.1." + routerSecond + " " + i + "\n"
+    confPseudo[routerFirst] += " neighbor 1.1.1." + routerSecond + " " + i + "\n"
     confPseudo[routerFirst] += " control-word include" + "\n"
     confPseudo[routerFirst] += " label 2" + i + " 2" + i + "\n"
+    confPseudo[routerFirst] += " pseudowire type 5 \n"
     confPseudo[routerFirst] += " preferred-path interface Tunnel-tp" + i[0:2] + "\n\n"
+
     if re.match('gig', listPseudowires[i][nameInterface], re.IGNORECASE):
         confPseudo[routerFirst] += "interface " + listPseudowires[i][nameInterface].strip() + "\n"
-        confPseudo[routerFirst] += " description " + listPseudowires[i]['description'].strip() + "\n"
+        confPseudo[routerFirst] += " description " + listPseudowires[i][descriptionPseudo].strip() + "\n"
         confPseudo[routerFirst] += " service instance 100 ethernet \n"
         confPseudo[routerFirst] += " encapsulation default \n\n"
 
-        confPseudo[routerFirst] += "l2vpn xconnect context " + '_'.join(listPseudowires[i]['description'][0:30].split()) + "\n"
+        confPseudo[routerFirst] += "l2vpn xconnect context " + '_'.join(listPseudowires[i][descriptionPseudo][0:30].split()) + "\n"
         confPseudo[routerFirst] += " member pseudowire" + i + "\n"
         confPseudo[routerFirst] += " member " + listPseudowires[i][nameInterface].strip() + " service-instance 100 \n\n"
+
     if re.match('cem', listPseudowires[i][nameInterface], re.IGNORECASE):
         numPort = re.match("^[^\d]*\d\/\d\/(\d)", listPseudowires[i][nameInterface].strip(), re.IGNORECASE).group(1)
         cemGroup = int(numPort) + 1
@@ -181,10 +187,10 @@ def templatePseudo(i, routerFirst, routerSecond, nameInterface):
         confPseudo[routerFirst] += " cem-group " + str(cemGroup) + " unframed  \n\n"
 
         confPseudo[routerFirst] += "interface " + listPseudowires[i][nameInterface].strip() + "\n"
-        confPseudo[routerFirst] += " description " + listPseudowires[i]['description'].strip() + "\n"
+        confPseudo[routerFirst] += " description " + listPseudowires[i][descriptionPseudo].strip() + "\n"
         confPseudo[routerFirst] += " cem " + str(cemGroup) + "\n\n"
 
-        confPseudo[routerFirst] += "l2vpn xconnect context " + '_'.join(listPseudowires[i]['description'][0:30].split()) + "\n"
+        confPseudo[routerFirst] += "l2vpn xconnect context " + '_'.join(listPseudowires[i][descriptionPseudo][0:30].split()) + "\n"
         confPseudo[routerFirst] += " member pseudowire" + i + "\n"
         confPseudo[routerFirst] += " member " + listPseudowires[i][nameInterface].strip() + " " + str(cemGroup) + " \n\n"
 
@@ -200,8 +206,8 @@ def createConfigPseudo():
             confPseudo[routerFirst] = ""
         if routerSecond not in confPseudo:
             confPseudo[routerSecond] = ""
-        templatePseudo(i, routerFirst, routerSecond, 'srv_int_first')
-        templatePseudo(i, routerSecond, routerFirst, 'srv_int_sec')
+        templatePseudo(i, routerFirst, routerSecond, 'srv_int_first', 'description_first')
+        templatePseudo(i, routerSecond, routerFirst, 'srv_int_sec', 'description_sec')
 
 
 def createConfigInterfaces():
