@@ -1,0 +1,28 @@
+#!Interfaces
+gig2:1:gig1
+gig1:2:gig2
+gig2:3:gig1
+gig1:4:gig2
+gig2:5:gig1
+
+
+#!Pseudowire1501
+description=Kanal Description Primo
+srv_int_first=gig3
+srv_int_sec=gig3
+
+#!Pseudowire1502
+description=Kanal Description Secondo 2mbits
+srv_int_first=gig0/2/0
+srv_int_sec=gig0/2/1
+
+#!Pseudowire2601
+description=Magistral MPLS
+srv_int_first=gig0/2/0
+srv_int_sec=gig0/2/1
+
+#!Pseudowire2602
+description= Kanal  Provider Main
+srv_int_first= cem0/0/0
+srv_int_sec= cem0/0/1
+
